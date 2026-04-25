@@ -2,8 +2,7 @@ import json
 import os
 import anthropic
 
-# Haiku is 20x cheaper than Sonnet/Opus and handles structured extraction perfectly.
-# There's no reason to use a more expensive model for a task this simple.
+# haiku is way cheaper than sonnet/opus and totally fine for just pulling fields out of an email
 MODEL = "claude-haiku-4-5-20251001"
 
 PROMPT_TEMPLATE = """Extract the following from this co-op application email.
@@ -26,15 +25,10 @@ Email body:
 
 
 def extract_application_data(subject: str, body: str) -> dict:
-    """Call Claude Haiku to extract structured data from one email.
-
-    Returns a dict with keys: company, role, status, deadline.
-    Raises ValueError if Claude returns malformed JSON (caller should catch and skip).
-    """
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-    # Truncate body to 2000 chars — Claude doesn't need the full email for extraction,
-    # and this keeps token costs low on long HTML-heavy emails.
+    # cap at 2000 chars - most of the signal is in the first few sentences anyway
+    # and long html emails would just waste tokens on nav bars and footers
     truncated_body = body[:2000] if body else "(no body)"
 
     message = client.messages.create(
@@ -52,7 +46,7 @@ def extract_application_data(subject: str, body: str) -> dict:
 
     raw_text = message.content[0].text.strip()
 
-    # Strip markdown fences if Claude wrapped the JSON anyway (it sometimes does).
+    # claude sometimes wraps the json in ```json even when told not to
     raw_text = raw_text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
 
     try:
@@ -60,7 +54,6 @@ def extract_application_data(subject: str, body: str) -> dict:
     except json.JSONDecodeError as e:
         raise ValueError(f"Claude returned non-JSON: {raw_text!r}") from e
 
-    # Normalise to expected keys with safe defaults.
     return {
         "company": data.get("company", "Unknown"),
         "role": data.get("role", "Unknown"),
