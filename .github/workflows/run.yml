@@ -1,0 +1,39 @@
+name: Run Co-op Tracker
+
+on:
+  schedule:
+    # Every 6 hours: minute 0, every 6th hour, any day/month/weekday
+    - cron: '0 */6 * * *'
+  # workflow_dispatch lets you click "Run workflow" manually in the Actions tab.
+  # Use this during testing instead of waiting for the cron to fire.
+  workflow_dispatch:
+
+jobs:
+  run-tracker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Write credential files from secrets
+        # GitHub Actions doesn't have a filesystem for secrets — they're env vars.
+        # We write them back to disk because the Google SDK expects files.
+        run: |
+          echo "${{ secrets.GOOGLE_TOKEN }}" > token.json
+          echo "${{ secrets.GOOGLE_CREDENTIALS }}" > credentials.json
+
+      - name: Run tracker
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+        # Run from the repo root so token.json and credentials.json are findable.
+        run: python src/main.py
